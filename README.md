@@ -2,6 +2,7 @@
 
 >El software colaborativo y cívico es nuestro principal aliado en un país con una democracia cuestionable.
 
+Aplicación colaborativa para evaluar espacios públicos.
 Este es un proyecto de código abierto con la finalidad de recibir contribuciones de desarrolladores que apoyen la causa.
 
 ## Stack tecnológico
