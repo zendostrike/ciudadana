@@ -1,8 +1,9 @@
 import { useEvaluations } from "@/helpers/useEvaluations";
+import { useSubratings } from "@/helpers/useSubratings";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -13,34 +14,38 @@ import {
   View,
 } from "react-native";
 
-const SUB_RATINGS = [
-  "greenAreas",
-  "waterQuality",
-  "noise",
-  "publicLighting",
-  "roadsQuality",
-  "security",
-  "sidewalksQuality",
-  "accessibility",
-];
-
 export default function NewEvaluationScreen() {
+  const { data: subratingsData, isError, isLoading } = useSubratings();
   const router = useRouter();
+  const { saveEvaluation } = useEvaluations();
+
   const [form, setForm] = useState({
     title: "",
     address: "",
     description: "",
     image: "",
     date: new Date().toISOString().split("T")[0],
-    subRatings: SUB_RATINGS.map((key) => ({
-      key,
-      score: 0,
-      observation: "",
-      evidence: [],
-    })),
+    subRatings: [] as {
+      key: string;
+      score: number;
+      observation: string;
+      evidence: string[];
+    }[],
   });
 
-  const { saveEvaluation } = useEvaluations();
+  useEffect(() => {
+    if (subratingsData && subratingsData.length > 0) {
+      setForm((prev) => ({
+        ...prev,
+        subRatings: subratingsData.map((item: any) => ({
+          key: item.category || item.name || "Sin nombre",
+          score: 0,
+          observation: "",
+          evidence: [],
+        })),
+      }));
+    }
+  }, [subratingsData]);
 
   const handleChange = (key: string, value: any) => {
     setForm({ ...form, [key]: value });
@@ -57,7 +62,9 @@ export default function NewEvaluationScreen() {
       (sum, r) => sum + Number(r.score || 0),
       0
     );
-    return (total / form.subRatings.length).toFixed(1);
+    return form.subRatings.length > 0
+      ? (total / form.subRatings.length).toFixed(1)
+      : "0.0";
   }, [form.subRatings]);
 
   const handleSubmit = async () => {
@@ -71,14 +78,14 @@ export default function NewEvaluationScreen() {
       address: evaluation.address,
       description: evaluation.description,
       date: new Date().toISOString(),
-      globalRating: globalRating ? parseFloat(globalRating) : 0,
+      globalRating: parseFloat(globalRating),
       subRatings: evaluation.subRatings.map((sub) => ({
         category: sub.key,
         score: sub.score,
         observation: sub.observation,
         evidence: sub.evidence || [],
       })),
-      image: evaluation.image.trim() || "https://via.placeholder.com/150", // fallback placeholder
+      image: evaluation.image.trim() || "https://via.placeholder.com/150",
     };
 
     const saved = await saveEvaluation(newEval);
@@ -89,6 +96,24 @@ export default function NewEvaluationScreen() {
       alert("Error al guardar la evaluación. Intenta nuevamente.");
     }
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.loadingText}>Cargando subcalificaciones...</Text>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.centered}>
+        <Text style={{ color: "red" }}>
+          Error al cargar las subcalificaciones.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -121,7 +146,6 @@ export default function NewEvaluationScreen() {
         onChangeText={(text) => handleChange("description", text)}
       />
 
-      {/* 🖼 Image URL Input */}
       <TextInput
         placeholder="URL de imagen (opcional)"
         style={styles.input}
@@ -136,7 +160,7 @@ export default function NewEvaluationScreen() {
       <Text style={styles.sectionTitle}>Subcalificaciones</Text>
 
       {form.subRatings.map((sub, index) => (
-        <View key={sub.key} style={styles.subRatingCard}>
+        <View key={index} style={styles.subRatingCard}>
           <Text style={styles.subTitle}>{formatLabel(sub.key)}</Text>
 
           <View style={styles.sliderRow}>
@@ -179,24 +203,12 @@ export default function NewEvaluationScreen() {
 }
 
 const formatLabel = (key: string) => {
-  const labels: Record<string, string> = {
-    greenAreas: "Áreas verdes",
-    waterQuality: "Calidad del agua",
-    noise: "Ruido ambiental",
-    publicLighting: "Alumbrado público",
-    roadsQuality: "Calidad de las vías",
-    security: "Seguridad",
-    sidewalksQuality: "Veredas",
-    accessibility: "Accesibilidad",
-  };
-  return labels[key] || key;
+  const words = key.replace(/([A-Z])/g, " $1");
+  return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#f9fafc",
-  },
+  container: { padding: 20, backgroundColor: "#f9fafc" },
   title: {
     fontSize: 26,
     fontWeight: "bold",
@@ -242,17 +254,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  subTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  sliderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
+  subTitle: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 8 },
+  sliderRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   scoreLabel: {
     width: 35,
     textAlign: "center",
@@ -266,10 +269,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
   },
-  evidenceText: {
-    color: "#007bff",
-    fontWeight: "500",
-  },
+  evidenceText: { color: "#007bff", fontWeight: "500" },
   submitButton: {
     backgroundColor: "#007bff",
     borderRadius: 10,
@@ -277,19 +277,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
   },
-  submitText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  backButton: {
-    flexDirection: "row",
+  submitText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  backButton: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  backText: { color: "#007bff", fontWeight: "500", marginLeft: 5 },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    height: 200,
   },
-  backText: {
-    color: "#007bff",
-    fontWeight: "500",
-    marginLeft: 5,
-  },
+  loadingText: { fontSize: 16, color: "#555" },
 });
